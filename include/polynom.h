@@ -180,7 +180,12 @@ private:
         return term1.variables == term2.variables;
     }
 
-    void simplify() {
+    bool static compareTermsForSort(const Polynomials::Term& a, const Polynomials::Term& b) {
+        
+        return a.variables < b.variables;
+    }
+
+    /*void simplify() {
         std::vector<Term> simplifiedTerms;
         for (const auto& term : terms) {
             bool combined = false;
@@ -199,8 +204,51 @@ private:
 
         
         terms.erase(std::remove_if(terms.begin(), terms.end(), [](const Term& term) { return term.coefficient == 0.0; }), terms.end());
+    }*/
+
+    void simplify() {
+       
+        if (terms.size() <= 1) {
+            
+            const double epsilon = 1e-9; 
+            if (!terms.empty() && std::abs(terms[0].coefficient) < epsilon) {
+                terms.clear(); 
+            }
+            return; 
+        }
+
+        
+        std::sort(terms.begin(), terms.end(), compareTermsForSort);
+
+        std::vector<Term> simplifiedTerms;        simplifiedTerms.push_back(terms[0]);
+
+        
+        for (size_t i = 1; i < terms.size(); ++i) {
+            if (terms[i].variables == simplifiedTerms.back().variables) {
+                simplifiedTerms.back().coefficient += terms[i].coefficient;
+            }
+            else {
+                simplifiedTerms.push_back(terms[i]);
+            }
+        }
+
+        const double epsilon = 1e-9; 
+        
+        simplifiedTerms.erase(
+            std::remove_if(simplifiedTerms.begin(), simplifiedTerms.end(),
+                [epsilon](const Term& term) {
+                    return std::abs(term.coefficient) < epsilon;
+                }),
+            simplifiedTerms.end() 
+        );
+
+       
+        terms = simplifiedTerms;
+
     }
 
+
+    
 
 public:
     Polynomials() {}
@@ -229,8 +277,53 @@ public:
         return result;
     }
 
+    Polynomials operator*(const Polynomials& other) const {
+        Polynomials result;
+        if (this->terms.empty() || other.terms.empty()) {
+            return result; 
+        }
 
-   
+        for (const auto& term1 : this->terms) {
+            for (const auto& term2 : other.terms) {
+                Term productTerm;
+                productTerm.coefficient = term1.coefficient * term2.coefficient;
+
+                const double epsilon_mult = 1e-12;
+                if (std::abs(productTerm.coefficient) < epsilon_mult) {
+                    continue; 
+                }
+
+                productTerm.variables = term1.variables;
+                for (const auto& var_pair : term2.variables) {
+                    productTerm.variables[var_pair.first] += var_pair.second;
+                }
+                result.terms.push_back(productTerm);
+            }
+        }
+        result.simplify();
+        return result;
+    }
+
+    Polynomials operator/(double constant) const {
+        const double epsilon_div = 1e-12;
+        if (std::abs(constant) < epsilon_div) {
+            throw std::domain_error("Division by zero or near-zero constant is not allowed.");
+        }
+
+        Polynomials result = *this;
+        if (result.terms.empty()) {
+            return result; 
+        }
+
+        for (auto& term : result.terms) {
+            term.coefficient /= constant;
+        }
+
+        result.simplify();
+
+        return result;
+    }
+
     double find(const std::map<char, int>& variables) const {
         for (const auto& term : terms) {
             if (term.variables == variables) {
